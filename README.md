@@ -318,18 +318,62 @@ GitHub Pages hosts **static files only** — the React frontend, not the Python 
    https://rohanjain11.github.io/agent-research-assistant/
    ```
 
-**To make live research work on GitHub Pages**, deploy the backend separately (Render, Railway, Fly.io, etc.) and connect it:
-
-1. Deploy the backend with `OPENAI_API_KEY` set
-2. Set backend `CORS_ORIGINS` to your GitHub Pages URL:
-   ```
-   CORS_ORIGINS=https://rohanjain11.github.io
-   ```
-3. In GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **Variables**
-4. Add variable `VITE_API_BASE` = your backend URL (e.g. `https://research-agent-api.onrender.com`)
-5. Re-run the deploy workflow (push to `main` or **Actions** → **Run workflow**)
+**To make live research work on GitHub Pages**, deploy the backend on Render (below) and connect it.
 
 Without `VITE_API_BASE`, the GitHub Pages site loads but API calls fail (no backend on Pages).
+
+### Render (backend)
+
+The repo includes a [`render.yaml`](render.yaml) blueprint. Two ways to deploy:
+
+#### Option A — Blueprint (fastest)
+
+1. Sign up at [render.com](https://render.com) and connect your GitHub account
+2. **New** → **Blueprint** → select `rohanjain11/agent-research-assistant`
+3. When prompted, set **OPENAI_API_KEY** (your `sk-...` key — stored as a secret on Render)
+4. Click **Apply** — Render creates a web service from `render.yaml`
+5. Wait for the first deploy (5–10 min; ChromaDB downloads an embedding model on first boot)
+6. Copy your service URL, e.g. `https://agent-research-assistant-api.onrender.com`
+7. Verify: open `https://YOUR-SERVICE.onrender.com/health` → should return `{"status":"ok",...}`
+
+#### Option B — Manual web service
+
+1. **New** → **Web Service** → connect `agent-research-assistant` repo
+2. Configure:
+
+   | Setting | Value |
+   |---------|-------|
+   | **Root Directory** | `backend` |
+   | **Runtime** | Python 3 |
+   | **Build Command** | `pip install -r requirements.txt` |
+   | **Start Command** | `uvicorn src.api:app --host 0.0.0.0 --port $PORT` |
+   | **Plan** | Free |
+
+3. **Environment** → add:
+
+   | Key | Value |
+   |-----|-------|
+   | `OPENAI_API_KEY` | your OpenAI key (`sk-...`) |
+   | `CORS_ORIGINS` | `https://rohanjain11.github.io` |
+   | `PYTHON_VERSION` | `3.12.0` |
+
+4. Deploy and test `/health` as above
+
+#### Connect frontend to backend
+
+After Render is live:
+
+1. GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **Variables**
+2. Add **`VITE_API_BASE`** = your Render URL (no trailing slash), e.g. `https://agent-research-assistant-api.onrender.com`
+3. Re-run the Pages deploy: **Actions** → **Deploy frontend to GitHub Pages** → **Run workflow**  
+   (or push any commit to `main`)
+4. Open [https://rohanjain11.github.io/agent-research-assistant/](https://rohanjain11.github.io/agent-research-assistant/) and run a research query
+
+**Notes:**
+
+- **Free tier cold starts:** Render sleeps after ~15 min idle. The first request may take 30–60s to wake the service.
+- **First research run** may be slower while ChromaDB loads its embedding model (~79 MB).
+- **Ephemeral disk:** logs and ChromaDB data reset when the service redeploys; reports are not persisted long-term on free tier.
 
 ### Local development
 

@@ -1,0 +1,19 @@
+# Render Blueprint — deploy backend from the Render dashboard:
+# New → Blueprint → connect this repo → apply.
+# Set OPENAI_API_KEY when prompted (secret, not committed).
+services:
+  - type: web
+    name: agent-research-assistant-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://rohanjain11.github.io
