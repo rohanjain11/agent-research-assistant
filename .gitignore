@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Backend runtime data
+backend/logs/
+backend/chroma_db/
+backend/artifacts/
+
+# Node
+node_modules/
+frontend/dist/
+.DS_Store
+
+# Exported reports at repo root
+Climate_*.md
+Future_*.md
+Large_*.md
