@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# GitHub Actions JS actions (checkout, setup-node) run on Node 24 runners.
+# See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
   pages: write
@@ -24,11 +29,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build
         working-directory: frontend
