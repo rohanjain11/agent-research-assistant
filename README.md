@@ -6,6 +6,20 @@ Built for portfolio and interview demos. Designed to show real agentic patterns:
 
 ---
 
+## Live Demo
+
+| | URL |
+|---|-----|
+| **Frontend** (GitHub Pages) | [rohanjain11.github.io/agent-research-assistant](https://rohanjain11.github.io/agent-research-assistant/) |
+| **Backend API** (Render) | [agent-research-assistant-api.onrender.com](https://agent-research-assistant-api.onrender.com) |
+| **Health check** | […/health](https://agent-research-assistant-api.onrender.com/health) |
+
+> **Note:** Render free tier sleeps after ~15 min idle. The first request after sleep may take 30–60s to wake the backend.
+
+**Example topics to try:** Future of quantum computing · Climate change mitigation strategies · Large language model alignment
+
+---
+
 ## What It Does
 
 Given a research topic (e.g. *"Climate change mitigation strategies"*), the pipeline:
@@ -37,6 +51,16 @@ User Query (React UI)
        └──────────────────┴──────────────────┴──────────────────┘
                          Structured JSON Logs
                     backend/logs/{agent}.log
+```
+
+**Production topology:**
+
+```
+GitHub Pages (React)          Render (FastAPI)
+rohanjain11.github.io/   →    agent-research-assistant-api.onrender.com
+agent-research-assistant/          │
+                                   POST /research?stream=true (SSE)
+                                   GET  /health, /logs/{agent}, /artifacts
 ```
 
 ---
@@ -90,6 +114,7 @@ Design tokens live in `frontend/tailwind.config.js` and shared utilities in `fro
 | **Frontend** | React 18, Vite, Tailwind CSS, react-markdown, remark-gfm, lucide-react, Inter + JetBrains Mono |
 | **Search** | DuckDuckGo via `ddgs` (free) |
 | **Embeddings** | ChromaDB built-in, runs locally (free) |
+| **Deployment** | GitHub Pages (frontend) · Render (backend) |
 
 ---
 
@@ -104,6 +129,7 @@ Design tokens live in `frontend/tailwind.config.js` and shared utilities in `fro
 ### 1. Clone and configure
 
 ```bash
+git clone https://github.com/rohanjain11/agent-research-assistant.git
 cd agent-research-assistant/backend
 cp .env.example .env
 ```
@@ -150,7 +176,10 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ## API Reference
 
-The frontend proxies `/api/*` → `http://localhost:8847/*` via Vite.
+| Environment | Base URL |
+|-------------|----------|
+| **Local dev** | `/api/*` → `http://localhost:8847/*` (Vite dev-server) |
+| **Production** | `https://agent-research-assistant-api.onrender.com` (set via `VITE_API_BASE` at build time) |
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -196,6 +225,7 @@ agent-research-assistant/
 │   └── .env.example
 ├── frontend/
 │   ├── src/
+│   │   ├── api.js                    # apiUrl() — dev vs production base URL
 │   │   ├── components/
 │   │   │   ├── SearchBar.jsx         # Hero search with focus glow
 │   │   │   ├── PipelineProgress.jsx  # Live agent cards + terminal stream
@@ -210,6 +240,9 @@ agent-research-assistant/
 │   ├── tailwind.config.js            # Colors, animations, design tokens
 │   ├── vite.config.js                # Proxies /api → localhost:8847
 │   └── package.json
+├── .github/workflows/
+│   └── deploy-pages.yml              # GitHub Pages CI (Node 24)
+├── render.yaml                       # Render Blueprint for backend
 ├── .gitignore
 └── README.md
 ```
@@ -237,7 +270,11 @@ Example log entry:
 View logs via API:
 
 ```bash
+# Local
 curl http://localhost:8847/logs/researcher | python3 -m json.tool
+
+# Production
+curl https://agent-research-assistant-api.onrender.com/logs/researcher | python3 -m json.tool
 ```
 
 Or in the UI: **Stats** tab → per-agent log viewer with color-coded event badges.
@@ -253,7 +290,8 @@ A full pipeline run uses **`gpt-4o-mini`** (~6–8 LLM calls) and typically cost
 | OpenAI (`gpt-4o-mini`) | ~$0.01–0.05 per run |
 | ChromaDB embeddings | Free (local) |
 | DuckDuckGo search | Free |
-| ChromaDB storage | Free (local disk) |
+| Render (free tier) | $0 (cold starts after idle) |
+| GitHub Pages | Free |
 
 ---
 
@@ -269,7 +307,7 @@ lsof -i :8847
 uvicorn src.api:app --reload --port 8847
 ```
 
-If 8847 is taken, pick another port and update `frontend/vite.config.js` proxy target to match.
+If 8847 is taken, pick another port and update `frontend/vite.config.js` dev-server target to match.
 
 ### `OPENAI_API_KEY is not set`
 
@@ -298,82 +336,62 @@ ChromaDB downloads an embedding model (~79 MB) on first use. Subsequent runs are
 
 ### Backend not reachable from frontend
 
-Confirm both servers are running and the Vite proxy in `frontend/vite.config.js` points to the same port as uvicorn (default: **8847**).
+**Local:** Confirm both servers are running and the Vite dev-server in `frontend/vite.config.js` points to the same port as uvicorn (default: **8847**).
+
+**Production (GitHub Pages):** Confirm the GitHub Actions variable `VITE_API_BASE` is set to your Render URL, then re-run the Pages deploy workflow so the frontend is rebuilt with the correct API base.
+
+### GitHub Pages site loads but research fails
+
+1. Check [backend /health](https://agent-research-assistant-api.onrender.com/health) — if it times out, the Render service may be waking from sleep (wait ~60s and retry)
+2. Confirm `VITE_API_BASE` is set in GitHub → **Settings** → **Secrets and variables** → **Actions** → **Variables**
+3. Confirm Render has `CORS_ORIGINS=https://rohanjain11.github.io`
+4. Re-run **Deploy frontend to GitHub Pages** after changing `VITE_API_BASE`
 
 ---
 
 ## Deployment
 
+| Service | Host | Status | Config |
+|---------|------|--------|--------|
+| **Frontend** | [GitHub Pages](https://rohanjain11.github.io/agent-research-assistant/) | live | `.github/workflows/deploy-pages.yml` |
+| **Backend** | [Render](https://agent-research-assistant-api.onrender.com) | live | [`render.yaml`](render.yaml) |
+
 ### GitHub Pages (frontend)
 
-GitHub Pages hosts **static files only** — the React frontend, not the Python backend. A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) builds and deploys the frontend on every push to `main`.
+GitHub Pages hosts static files only. The workflow in `.github/workflows/deploy-pages.yml` builds with `BASE_PATH=/agent-research-assistant/` and deploys on every push to `main`.
 
-**Setup after pushing to GitHub:**
+**One-time setup:**
 
-1. Go to your repo → **Settings** → **Pages**
-2. Under **Build and deployment**, set source to **GitHub Actions**
-3. After the first push to `main`, the workflow runs automatically
-4. Your site will be live at:
-   ```
-   https://rohanjain11.github.io/agent-research-assistant/
-   ```
+1. Repo → **Settings** → **Pages** → set source to **GitHub Actions**
+2. Push to `main` — workflow runs automatically
 
-**To make live research work on GitHub Pages**, deploy the backend on Render (below) and connect it.
+**Required for live API calls:**
 
-Without `VITE_API_BASE`, the GitHub Pages site loads but API calls fail (no backend on Pages).
+| GitHub Actions variable | Value |
+|-------------------------|-------|
+| `VITE_API_BASE` | `https://agent-research-assistant-api.onrender.com` |
+
+After changing this variable, re-run **Actions** → **Deploy frontend to GitHub Pages** → **Run workflow**.
 
 ### Render (backend)
 
-The repo includes a [`render.yaml`](render.yaml) blueprint. Two ways to deploy:
+Deploy via **New** → **Blueprint** → select `rohanjain11/agent-research-assistant`, then set `OPENAI_API_KEY` when prompted.
 
-#### Option A — Blueprint (fastest)
+**Environment variables (set in Render):**
 
-1. Sign up at [render.com](https://render.com) and connect your GitHub account
-2. **New** → **Blueprint** → select `rohanjain11/agent-research-assistant`
-3. When prompted, set **OPENAI_API_KEY** (your `sk-...` key — stored as a secret on Render)
-4. Click **Apply** — Render creates a web service from `render.yaml`
-5. Wait for the first deploy (5–10 min; ChromaDB downloads an embedding model on first boot)
-6. Copy your service URL, e.g. `https://agent-research-assistant-api.onrender.com`
-7. Verify: open `https://YOUR-SERVICE.onrender.com/health` → should return `{"status":"ok",...}`
+| Key | Value |
+|-----|-------|
+| `OPENAI_API_KEY` | your OpenAI key (`sk-...`) — secret |
+| `CORS_ORIGINS` | `https://rohanjain11.github.io` |
+| `PYTHON_VERSION` | `3.12.0` |
 
-#### Option B — Manual web service
+**Manual deploy alternative** — **New** → **Web Service** with root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn src.api:app --host 0.0.0.0 --port $PORT`.
 
-1. **New** → **Web Service** → connect `agent-research-assistant` repo
-2. Configure:
+**Production notes:**
 
-   | Setting | Value |
-   |---------|-------|
-   | **Root Directory** | `backend` |
-   | **Runtime** | Python 3 |
-   | **Build Command** | `pip install -r requirements.txt` |
-   | **Start Command** | `uvicorn src.api:app --host 0.0.0.0 --port $PORT` |
-   | **Plan** | Free |
-
-3. **Environment** → add:
-
-   | Key | Value |
-   |-----|-------|
-   | `OPENAI_API_KEY` | your OpenAI key (`sk-...`) |
-   | `CORS_ORIGINS` | `https://rohanjain11.github.io` |
-   | `PYTHON_VERSION` | `3.12.0` |
-
-4. Deploy and test `/health` as above
-
-#### Connect frontend to backend
-
-After Render is live:
-
-1. GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **Variables**
-2. Add **`VITE_API_BASE`** = your Render URL (no trailing slash), e.g. `https://agent-research-assistant-api.onrender.com`
-3. Re-run the Pages deploy: **Actions** → **Deploy frontend to GitHub Pages** → **Run workflow**  
-   (or push any commit to `main`)
-4. Open [https://rohanjain11.github.io/agent-research-assistant/](https://rohanjain11.github.io/agent-research-assistant/) and run a research query
-
-**Notes:**
-
-- **Free tier cold starts:** Render sleeps after ~15 min idle. The first request may take 30–60s to wake the service.
-- **First research run** may be slower while ChromaDB loads its embedding model (~79 MB).
-- **Ephemeral disk:** logs and ChromaDB data reset when the service redeploys; reports are not persisted long-term on free tier.
+- **Cold starts:** Free tier sleeps after ~15 min idle; first request may take 30–60s
+- **First research run:** ChromaDB downloads an embedding model (~79 MB) on first boot
+- **Ephemeral disk:** logs, ChromaDB, and artifacts reset on redeploy
 
 ### Local development
 
@@ -382,12 +400,6 @@ After Render is live:
 | Frontend | http://localhost:5173 |
 | Backend | http://localhost:8847 |
 | API proxy | `/api/*` → backend (via Vite) |
-
----
-
-- Future of quantum computing
-- Climate change mitigation strategies
-- Large language model alignment
 
 ---
 
